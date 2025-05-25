@@ -9,15 +9,11 @@ import numpy as np
 import pandas as pd
 from PIL import Image
 from tqdm import tqdm
-
 from scipy.ndimage import rotate, gaussian_filter, sobel
-
 from skimage.feature import hog
-
 import tensorflow as tf
 from tensorflow.keras.applications import ResNet50, resnet50
 from tensorflow.keras.preprocessing.image import img_to_array
-
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import classification_report, confusion_matrix
@@ -163,7 +159,7 @@ os.makedirs(os.path.dirname(OUT_FEATURE), exist_ok=True)
 df_all.to_csv(OUT_FEATURE, index=False)
 print("Saved feature matrix:", df_all.shape)
 
-print("Training RandomForest for feature importances…")
+print("Training RandomForest for importances…")
 X = df_all.drop(columns=['label'])
 y = df_all['label']
 X_train,X_test,y_train,y_test = train_test_split(X, y, test_size=TEST_SIZE,
@@ -175,7 +171,7 @@ importances = pd.Series(rf0.feature_importances_, index=X.columns)
 top15 = importances.nlargest(15).index.tolist()
 print("Top15 features:", top15)
 
-print("Retraining on top15 features…")
+print("Retraining on top15")
 rf1 = RandomForestClassifier(n_estimators=200, random_state=RND_STATE)
 rf1.fit(X_train[top15], y_train)
 y_pred = rf1.predict(X_test[top15])
@@ -187,6 +183,6 @@ plt.figure(figsize=(6,5))
 sns.heatmap(cm, annot=True, fmt='d',
             xticklabels=rf1.classes_, yticklabels=rf1.classes_,
             cmap='Blues')
-plt.title("Confusion Matrix on Top15 Features")
+plt.title("Confusion Matrix on Top 15 Features")
 plt.ylabel('True'); plt.xlabel('Predicted')
 plt.show()

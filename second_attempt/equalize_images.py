@@ -7,101 +7,112 @@ import numpy as np
 from PIL import Image, ImageEnhance
 from tqdm import tqdm
 
-# --- PARAMETERS ---
-mapping_csv = 'dataset/processed/grouped_classifications.csv'
-img_dir     = ''  # full paths are already in CSV
-out_dir     = 'dataset/processed/images'
-out_csv     = 'dataset/processed/augmented.csv'
-TARGET      = 5826  # target per-class count
+mapping_csv = './../dataset/processed/grouped_classifications.csv'
+# img_dir left blank because CSV has full paths
+img_dir = ''
+out_dir = './../dataset/processed/images'
+out_csv = './../dataset/processed/augmented.csv'
+TARGET = 5826  # aim to have this many per class
 
-# Reset output directory
+# prepare output folder
 if os.path.exists(out_dir):
-    shutil.rmtree(out_dir)
+    try:
+        shutil.rmtree(out_dir)
+    except Exception as e:
+        print('Warning: could not clear folder', e)
 os.makedirs(out_dir, exist_ok=True)
 
-# Load CSV
-df = pd.read_csv(mapping_csv)
+# load the classification CSV
+df = pd.DataFrame()
+try:
+    df = pd.read_csv(mapping_csv)
+except Exception as e:
+    print('Error reading mapping CSV:', e)
 
-# Track all output records
-records = []
+records = []  # to store (image_path, galaxy_class)
 
-# --- Copy original images to flat output directory ---
-print("Copying original images...")
-for _, r in tqdm(df.iterrows(), total=len(df)):
-    src = r.image_path  # full path in CSV
-    filename = os.path.basename(src)
-    dst = os.path.join(out_dir, filename)
-
+print('Copying original images...')
+for idx, row in tqdm(df.iterrows(), total=len(df)):
+    src = row.image_path  # full path
+    fname = os.path.basename(src)
+    dst = os.path.join(out_dir, fname)
     try:
         img = Image.open(src)
         img.save(dst)
-        records.append({'image_path': filename, 'galaxy_class': r.galaxy_class})
+        records.append({'image_path': fname, 'galaxy_class': row.galaxy_class})
     except Exception as e:
-        print(f"Error copying {src}: {e}")
+        print(f"Skipped {src}: {e}")
         continue
 
-# --- Define augmentations ---
+# define augmentation functions
 def random_flip(img):
     if np.random.rand() < 0.5:
         img = img.transpose(Image.FLIP_LEFT_RIGHT)
-    if np.random.rand() < 0.2:
+    if np.random.rand() < 0.3:
         img = img.transpose(Image.FLIP_TOP_BOTTOM)
     return img
 
-def random_rotate(img, max_angle=30):
-    ang = np.random.uniform(-max_angle, max_angle)
-    return img.rotate(ang, resample=Image.BILINEAR, expand=False)
+def random_rotate(img, angle=30):
+    a = np.random.uniform(-angle, angle)
+    return img.rotate(a)
 
-def random_shear(img, max_shear=0.2):
+def random_shear(img, shear=0.2):
     w, h = img.size
-    sh = np.random.uniform(-max_shear, max_shear)
-    a, b, c = 1, sh, 0
-    d, e, f = 0, 1, 0
-    return img.transform((w, h), Image.AFFINE, (a, b, c, d, e, f), resample=Image.BILINEAR)
+    s = np.random.uniform(-shear, shear)
+    # simple horizontal shear
+    return img.transform((w, h), Image.AFFINE, (1, s, 0, 0, 1, 0))
 
 def random_brightness(img, var=0.2):
     enhancer = ImageEnhance.Brightness(img)
-    factor = 1.0 + np.random.uniform(-var, var)
-    return enhancer.enhance(factor)
+    f = 1.0 + np.random.uniform(-var, var)
+    return enhancer.enhance(f)
 
-# --- Perform augmentations ---
-print("\nAugmenting minority classes...")
-class_counts = df.galaxy_class.value_counts().to_dict()
-
-for cls, count in class_counts.items():
-    needed = max(0, TARGET - count)
-    if needed == 0:
+# count per class
+totals = df.galaxy_class.value_counts().to_dict()
+print('\nAugmenting classes to target...')
+for cls, cnt in totals.items():
+    need = TARGET - cnt
+    if need <= 0:
         continue
-
-    print(f"Augmenting {cls}: need {needed}")
-    class_files = df[df.galaxy_class == cls].image_path.apply(os.path.basename).tolist()
+    print(f"{cls}: current {cnt}, need {need}")
+    files = df[df.galaxy_class == cls].image_path.apply(os.path.basename).tolist()
     i = 0
-
-    while i < needed:
-        for fname in class_files:
-            if i >= needed:
+    while i < need:
+        for f in files:
+            if i >= need:
                 break
-
+            p = os.path.join(out_dir, f)
             try:
-                img = Image.open(os.path.join(out_dir, fname))
+                img = Image.open(p)
             except:
+                print('Could not open', p)
+                continue
+            # apply random transformations
+            new = random_flip(img)
+            new = random_rotate(new)
+            new = random_shear(new)
+            new = random_brightness(new)
+
+            new_name = f.replace('.jpg', '') + f'_aug{i}.jpg'
+            save_path = os.path.join(out_dir, new_name)
+            try:
+                new.save(save_path)
+                records.append({'image_path': new_name, 'galaxy_class': cls})
+                i += 1
+            except Exception as e:
+                print('Save failed:', e)
                 continue
 
-            # Apply augmentations
-            aug = random_flip(img)
-            aug = random_rotate(aug)
-            aug = random_shear(aug)
-            aug = random_brightness(aug)
-
-            new_name = f"{os.path.splitext(fname)[0]}_aug{i}.jpg"
-            out_path = os.path.join(out_dir, new_name)
-            aug.save(out_path)
-
-            records.append({'image_path': new_name, 'galaxy_class': cls})
-            i += 1
-
-# --- Save new mapping ---
+# save augmented CSV
 out_df = pd.DataFrame(records)
-out_df.to_csv(out_csv, index=False)
+print(f"Saving augmented CSV with {len(out_df)} rows to {out_csv}")
+out_dir2 = os.path.dirname(out_csv)
+if not os.path.exists(out_dir2):
+    os.makedirs(out_dir2, exist_ok=True)
+try:
+    out_df.to_csv(out_csv, index=False)
+except Exception as e:
+    print('CSV save error:', e)
 
-print("\n Done! Final dataset size:", len(out_df))
+print('All done.')
+
