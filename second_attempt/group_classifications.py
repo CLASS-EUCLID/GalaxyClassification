@@ -1,3 +1,5 @@
+# Simplifies the labels, putting them in 4 big categories
+
 import pandas as pd
 
 def group_galaxies(label):

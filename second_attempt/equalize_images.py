@@ -1,3 +1,5 @@
+# Eliptical galaxies were dominating by number so we add effects to the other ones to equalize the dataset without overfitting hopefully
+
 import os
 import shutil
 import pandas as pd

@@ -1,3 +1,8 @@
+# Extracts all features
+# Trains a model on all of them
+# Chooses best 15
+# Trains a model on the top 15
+
 import os
 import cv2
 import numpy as np
@@ -5,37 +10,31 @@ import pandas as pd
 from PIL import Image
 from tqdm import tqdm
 
-# Classical
 from scipy.ndimage import rotate, gaussian_filter, sobel
-# Texture
+
 from skimage.feature import hog
-# CNN embedding
+
 import tensorflow as tf
 from tensorflow.keras.applications import ResNet50, resnet50
 from tensorflow.keras.preprocessing.image import img_to_array
-# ML
+
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import classification_report, confusion_matrix
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-# ───── PARAMETERS ─────
 IMAGE_DIR   = './../dataset/processed/cropped'
-MAP_CSV     = './../dataset/processed/augmented.csv'     # has columns image_path,galaxy_class
+MAP_CSV     = './../dataset/processed/augmented.csv'     
 OUT_FEATURE = './../dataset/processed/all_features_cropped.csv'
 TEST_SIZE   = 0.2
 RND_STATE   = 42
-# ──────────────────────
 
-# 1) Load mapping
 df_map = pd.read_csv(MAP_CSV)
 
-# 2) Prepare CNN
 cnn_model = ResNet50(weights='imagenet', include_top=False, pooling='avg',
                      input_shape=(224,224,3))
 
-# ───── FEATURE FUNCTIONS ─────
 def concentration_index(img):
     h,w = img.shape
     y,x = np.indices((h,w))
@@ -113,7 +112,6 @@ def cnn_emb(path):
     x   = resnet50.preprocess_input(x)
     return cnn_model.predict(x, verbose=0).flatten()
 
-# ───── EXTRACT FEATURES ─────
 rows = []
 print("Extracting features:")
 for _, r in tqdm(df_map.iterrows(), total=len(df_map)):
@@ -140,21 +138,18 @@ for _, r in tqdm(df_map.iterrows(), total=len(df_map)):
       'mean_intensity': imL.mean()
     }
 
-    # texture (first 10 dims)
     try:
         hogv = hog_feat(imL)[:10]
         feats.update({f'HOG{i}':hogv[i] for i in range(len(hogv))})
     except Exception as e:
         tqdm.write(f"[ERROR] HOG {full_path}: {e}")
 
-    # color hist (6 dims)
     try:
         ch = color_hist(full_path)[:6]
         feats.update({f'CH{i}':ch[i] for i in range(len(ch))})
     except Exception as e:
         tqdm.write(f"[ERROR] ColorHist {full_path}: {e}")
 
-    # cnn embedding (first 50 dims)
     try:
         emb = cnn_emb(full_path)[:50]
         feats.update({f'CNN{i}':emb[i] for i in range(len(emb))})
@@ -168,7 +163,6 @@ os.makedirs(os.path.dirname(OUT_FEATURE), exist_ok=True)
 df_all.to_csv(OUT_FEATURE, index=False)
 print("Saved feature matrix:", df_all.shape)
 
-# ───── TRAIN / SELECT / RE-TRAIN ─────
 print("Training RandomForest for feature importances…")
 X = df_all.drop(columns=['label'])
 y = df_all['label']

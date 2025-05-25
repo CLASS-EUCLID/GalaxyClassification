@@ -3,7 +3,7 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 
 # Load your training dataset
-train_df = pd.read_csv('dataset/processed/train.csv')
+train_df = pd.read_csv('./../dataset/processed/train.csv')
 
 # Select only numerical columns for correlation (excluding the target if categorical)
 numerical_cols = train_df.select_dtypes(include=['float64', 'int64']).columns

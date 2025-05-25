@@ -1,3 +1,5 @@
+# Matches id to obj_id mapping the jpgs to the label
+
 import os
 import pandas as pd
 
