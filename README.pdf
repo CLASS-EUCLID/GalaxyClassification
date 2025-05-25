@@ -1,0 +1,110 @@
+314CA Biciusca Tudor-Andrei
+# Galaxy Classification Project
+
+This project classifies galaxy images into four types: Elliptical, Spiral, Barred Spiral, and Other/Unclassified.
+The classifications are based on the Hubble Sequence https://en.wikipedia.org/wiki/Hubble_sequence
+
+## Overview
+
+### Raw Data
+
+Start from:
+
+1. One folder containing ~16k images of galaxies in 424x424 resolution, each with it's own asset_id
+2. A csv file that links asset_id to obj_id which is the standard way to catalogue galaxies
+Link : https://skyserver.sdss.org/dr7/en/tools/quicklook/quickobj.asp?id=587738947200024706
+3. A csv file containing obj_id and a lot of features including the classification of that galaxy
+
+The process:
+
+1. Link the asset_id to the classification
+2. The dataset uses a lot of classifications (very specific ones) so for the purposes of this project we group them in the 4 big ones mentioned
+3. Crop images to keep only the main galaxy (otherwise the photos are very noisy and clutered with other galaxies)
+4. Equalize the dataset by applying effects (rotations, shears, mirroring...) to better train the model
+5. Extracts numerical features from each cropped image.
+6. Selects the most important features.
+7. Trains a Random Forest classifier on those features.
+
+## Data Preparation
+
+* Original images: `dataset/raw/images/`
+* CSV mapping: `dataset/processed/augmented.csv` with columns `image_path,galaxy_class`
+
+### Augmentation
+
+I wrote a script to balance classes by flipping, rotating, and adjusting brightness.
+
+### Cropping
+
+I use OpenCV to:
+
+1. Blur and threshold the image.
+2. Find contours and pick the one nearest the center.
+3. Crop around that contour and save to `dataset/processed/cropped/`.
+
+## Feature Extraction
+
+I extract:
+
+* 8 classical features (concentration, ellipticity, gini, M20, asymmetry, smoothness, mean intensity, edge density)
+* 10 HOG features
+* 6 RGB color histogram bins
+* 50 CNN embedding features (ResNet50)
+
+Results are saved to `dataset/processed/all_features_cropped.csv`.
+
+## Feature Selection and Training
+
+1. Load features and split into train/test (80/20, stratified).
+2. Train a Random Forest to get feature importances.
+3. Pick the top 15 features and retrain a second Random Forest.
+4. Evaluate on the test set and print metrics.
+
+## Results
+
+* Final accuracy: ~60%
+* Classes still confused: Spirals vs Barred Spirals.
+
+## Problems and Fixes
+
+* Too many types of galaxy some of them having only 1 (one) example : Grouping galaxies based on their prefix
+* Predictions preferred Elliptical Galaxies due to the big number of data on them : Added image effects to equalize the number of photos.
+* Very low original accuracy : Better feature selection using a CNN and more features in general (went from 8 to 15)
+* Slow processing: added `tqdm` progress bars to make sure we don't find out the program is stuck after 1 hour (happened).
+* Noisy images: cropped central galaxy before feature extraction.
+
+## Next Steps
+
+* Improve image preprocessing (deblurring).
+* Try more features (LBP, Fourier features).
+* Test other models (XGBoost, MLP).
+
+## Other Details 
+
+* Time to extract the features ~ 1:30 (i have no gpu and bad cpu on the machine i worked on)
+* The modest results are part due to my inexperience but also because of the low resolution data we are working with
+
+Classification Report: Top 15 Features
+                    precision    recall  f1-score   support
+
+     Barred Spiral       0.60      0.60      0.60      1165
+        Elliptical       0.65      0.72      0.68      1165
+Other/Unclassified       0.81      0.89      0.85      1164
+            Spiral       0.53      0.42      0.47      1165
+
+          accuracy                           0.66      4659
+         macro avg       0.65      0.66      0.65      4659
+      weighted avg       0.65      0.66      0.65      4659
+
+Classification Report: Full features
+
+                    precision    recall  f1-score   support
+
+     Barred Spiral       0.57      0.60      0.59      1165
+        Elliptical       0.64      0.73      0.68      1165
+Other/Unclassified       0.79      0.89      0.84      1164
+            Spiral       0.54      0.37      0.44      1165
+
+          accuracy                           0.65      4659
+         macro avg       0.64      0.65      0.64      4659
+      weighted avg       0.64      0.65      0.64      4659

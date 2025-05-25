@@ -15,7 +15,11 @@ X_test = test_df.drop(columns=['filename', 'class'])
 y_test = test_df['class']
 
 # 3) Initialize and train the model
-model = RandomForestClassifier(n_estimators=100, random_state=42)
+model = RandomForestClassifier(n_estimators=200,
+							   max_depth = 10,
+							   class_weight='balanced',
+							   min_samples_split=5,
+							    random_state=42)
 model.fit(X_train, y_train)
 
 # 4) Predict on test data
